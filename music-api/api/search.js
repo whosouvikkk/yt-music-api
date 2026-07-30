@@ -1,32 +1,36 @@
-const { fetchSearch } = require('../lib/provider');
+const { fetchById } = require('../lib/provider');
 const { formatTrack } = require('../lib/formatter');
-const { requireQueryParam } = require('../utils/validation');
+const { requireQueryParam, validateId } = require('../utils/validation');
 const { handleError } = require('../lib/errors');
+const { STATUS } = require('../utils/constants');
 const cache = require('../lib/cache');
 
 module.exports = async (req, res) => {
   try {
-    const query = requireQueryParam(req, 'q');
-    const cacheKey = `search:${query.toLowerCase()}`;
+    const id = requireQueryParam(req, 'id');
+    validateId(id);
+    
+    const cacheKey = `song:${id}`;
 
-    // Check Cache
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
-      return res.status(200).json({ success: true, results: cachedData });
+      return res.status(200).json({ success: true, data: cachedData });
     }
 
-    // Fetch from Provider
-    const rawData = await fetchSearch(query);
+    const rawData = await fetchById(id, 'song');
     
-    // Format response
-    const results = (rawData.results || []).map(formatTrack);
+    if (!rawData.results || rawData.results.length === 0) {
+      const err = new Error('Song not found');
+      err.status = STATUS.NOT_FOUND;
+      throw err;
+    }
 
-    // Save to Cache
-    cache.set(cacheKey, results);
+    const songData = formatTrack(rawData.results[0]);
+    cache.set(cacheKey, songData);
 
     return res.status(200).json({
       success: true,
-      results
+      data: songData
     });
 
   } catch (error) {
